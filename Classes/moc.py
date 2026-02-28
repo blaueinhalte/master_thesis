@@ -77,11 +77,11 @@ class moc:
         # for calculating amoc max
         self.min_depth = 500
 
-        if 'Historical' in self.suptitle:
+        if 'Historical' in self.suptitle or 'HIST' in self.suptitle:
             self.suptitle_color = 'crimson'
-        elif 'Atmosphere' in self.suptitle:
+        elif 'Atmosphere' in self.suptitle or 'ATM' in self.suptitle:
             self.suptitle_color = 'forestgreen'
-        elif 'Ocean' in self.suptitle:
+        elif 'Ocean' in self.suptitle or 'OCE' in self.suptitle:
             self.suptitle_color = 'mediumblue'
         elif 'Observation' in self.suptitle:
             self.suptitle_color = 'darkorange'
@@ -570,7 +570,7 @@ class moc:
                 cf = ax.contourf(
                     moc["lat"], depth, moc,
                     levels=self.clevels, cmap="RdBu_r",
-                    vmin=-self.vmax, vmax=self.vmax
+                    vmin=-self.vmax, vmax=self.vmax, extend='both'
                 )
                 cs = ax.contour(moc["lat"], depth, moc, levels=self.clevels, colors="grey", linewidths=0.5)
                 ax.contour(moc["lat"], depth, moc, levels=[0], colors="black", linewidths=1.0)
@@ -672,7 +672,7 @@ class moc:
 
     def plot_panel_v3(self, glo=None, atlantic=None, indopac=None, 
                            split=True, weddel=None, scatter=False, arrows=False, layers=None, lat_zoom=None,
-                           savefig=False, folder=None, run=None): 
+                           savefig=False, folder=None, run=None, add_cbar=False): 
             """
             Plot the Meridional Overturning Circulation (MOC) streamfunction for different ocean basins.
     
@@ -724,27 +724,28 @@ class moc:
             basin_title = ["Atlantic", "Indo-Pacific", "Southern Ocean"]
     
             # Determine whether we want a single shared colorbar
-            add_cbar = (n_sim > 1) or (n_sim == 1 and isinstance(self.suptitle, str) and ("Ocean" in self.suptitle)) or (arrows)
+            if add_cbar==False:
+                add_cbar = (n_sim > 1) or (n_sim == 1 and isinstance(self.suptitle, str) and ("Ocean" in self.suptitle or "OCE" in self.suptitle)) or (arrows) 
     
             # Make figure size
-            fig_w = 12 * n_basins
+            fig_w = 10 * n_basins
             # Add a small extra vertical space if we will place colorbar below
-            fig_h = 6 * n_sim + (0.6 if add_cbar else 0.2)
+            fig_h = 5 * n_sim + (1.5) # if add_cbar else 0)
             fig = plt.figure(figsize=(fig_w, fig_h))
     
             # GridSpec: rows = n_sim (plots) + (1 if add_cbar else 0) for colorbar
-            gs_rows = n_sim + (1 if add_cbar else 0)
+            gs_rows = n_sim + (1 ) # if add_cbar else 0)
             # Use a small height ratio for the colorbar row (last row)
-            if add_cbar:
-                height_ratios = [1.0] * n_sim + [0.06]
-                gs = GridSpec(gs_rows, n_basins, figure=fig, height_ratios=height_ratios, hspace=0.25, wspace=0.2)
+            if True: # add_cbar:
+                height_ratios = [5] * n_sim + [.75]
+                gs = GridSpec(gs_rows, n_basins, figure=fig, height_ratios=height_ratios, hspace=0.4, wspace=0.12) 
             else:
-                gs = GridSpec(gs_rows, n_basins, figure=fig, hspace=0.25, wspace=0.2)
+                gs = GridSpec(gs_rows, n_basins, figure=fig, wspace=0.12) #hspace=0.4,
     
             # Optional: keep axes if you want later access; shape [n_sim][n_basins]
-            axes = [[None for _ in range(n_basins)] for _ in range(n_sim)]
+            axes = np.array([[None for _ in range(n_basins)] for _ in range(n_sim)])
     
-            for sim in range(n_sim):
+            for r, sim in enumerate(range(n_sim)):
                 glo_sim = glo[sim]
                 atlantic_sim = atlantic[sim]
                 indopac_sim = indopac[sim]
@@ -789,7 +790,7 @@ class moc:
                     cf = ax.contourf(
                         moc["lat"], depth, moc,
                         levels=self.clevels, cmap="RdBu_r",
-                        vmin=-self.vmax, vmax=self.vmax
+                        vmin=-self.vmax, vmax=self.vmax, extend='both'
                     )
                     cs = ax.contour(moc["lat"], depth, moc, levels=self.clevels, colors="grey", linewidths=0.5)
                     ax.contour(moc["lat"], depth, moc, levels=[0], colors="black", linewidths=1.0)
@@ -812,9 +813,17 @@ class moc:
                             ax.clabel(cs_so, inline=True, fontsize=8, fmt="%1.0f")
     
                     ax.invert_yaxis()
-                    ax.set_title(f'{title} r{sim+1}' if n_sim>3 else title, fontsize=14)
-                    ax.set_xlabel("Latitude", fontsize=12)
-                    ax.set_ylabel("Depth (m)", fontsize=12)
+                    
+                    if n_sim>3:
+                        ax.set_title(f'{title} r{sim+1}', fontsize=14)
+
+                    if "Historical" in self.suptitle or "HIST" in self.suptitle or arrows:
+                        ax.set_title(title, pad=20)
+                    
+                    if add_cbar:
+                        ax.set_xlabel("Latitude")
+                    if col==0:
+                        ax.set_ylabel("Depth (m)")
     
                     # Optional Weddel sea (only meaningful when not split and only in Atlantic column)
                     if weddel and (not split) and col == 0:
@@ -862,16 +871,36 @@ class moc:
     
                     if lat_zoom is not None:
                         ax.set_xlim([lat_zoom.start, lat_zoom.stop])
+
+                    
     
             # Add ONE shared horizontal colorbar below the plots (only if add_cbar is True)
             if add_cbar:
                 cax = fig.add_subplot(gs[-1, :])  # last row, span all basin columns
                 cbar = fig.colorbar(cf, cax=cax, orientation="horizontal")
-                cbar.set_label("Meridional Transport (Sv)", fontsize=12)
+                cbar.set_label("Meridional Transport (Sv)")
     
             # Suptitle centering: center across full figure
-            if isinstance(self.suptitle, str) and self.suptitle:
-                fig.suptitle(self.suptitle, color=self.suptitle_color, x=0.5, y=0.96, fontsize=16)
+            # if isinstance(self.suptitle, str) and self.suptitle:
+            #    fig.suptitle(self.suptitle, color=self.suptitle_color, x=0.5, y=0.96, fontsize=16)
+
+            # vertical row titles (leftmost column only)     
+
+            for r, ax in enumerate(axes[:,0]):
+                if axes.shape[0]==1:
+                    suptitle = [self.suptitle]
+                    color = [self.suptitle_color]
+                else:
+                    suptitle = ['HIST', 'ATM', 'OCE']
+                    color = ['crimson', 'forestgreen', 'mediumblue']
+                ax.text(
+                    -0.17, 0.5, suptitle[r],
+                    color=color[r],
+                    transform=ax.transAxes,
+                    rotation=90,
+                    va='center', ha='center',
+                    fontsize=28, fontweight='bold'
+                )
     
             # Save figure if requested
             if savefig:
@@ -881,8 +910,296 @@ class moc:
                 plt.savefig(os.path.join(folder, fname), dpi=300, bbox_inches="tight")
                 if ax is None:
                     plt.close(fig)
-    
+
             return fig, ax
+
+    def plot_panel_members(self, glo=None, atlantic=None, indopac=None, 
+                           layers=None, lat_zoom=None, savefig=False, folder=None, run=None):
+        """
+        Plot the Meridional Overturning Circulation (MOC) streamfunction for multiple ensemble members.
+        
+        Args:
+        - atlantic (list of xarray.DataArray): MOC data for the Atlantic Ocean for each member.
+        - indopac (list of xarray.DataArray): MOC data for the Indo-Pacific Ocean for each member.
+        - glo (list of xarray.DataArray): MOC data for the Southern Ocean for each member.
+        - layers (int or slice, optional): Select specific depth layers for plotting.
+        - lat_zoom (slice, optional): Latitude range to zoom in on.
+        - savefig (bool, optional): Whether to save the plot to a file.
+        - folder (str, optional): Folder to save the figure in (if savefig is True).
+        - run (str, optional): A string to include in the file name if saving the figure.
+        
+        Returns:
+        list: A list containing the figure objects.
+        
+        """
+        
+        if savefig and any(arg is None for arg in [folder, run]):
+            raise ValueError("Arguments 'folder' and 'run' must be given to save the figure correctly.")
+        
+        if any(x is None for x in [glo, atlantic, indopac]):
+            glo, atlantic, indopac = self.calc_mean_moc()
+        
+        if not isinstance(glo, list):
+            atlantic = [atlantic]
+            indopac = [indopac]
+            glo = [glo]
+        
+        n_members = len(glo)
+        depth = glo[0][self.depth_name].values
+        
+        # Determine layout based on number of members
+        if n_members == 50:
+            # Two figures: 13x4 and 12x4
+            configs = [(12, 4), (13, 4)]
+            member_ranges = [range(0, 24), range(24, 50)]
+        elif n_members == 16:
+            # One figure: 8x4
+            configs = [(8, 4)]
+            member_ranges = [range(0, 16)]
+        else:
+            raise ValueError(f"Number of members must be 16 or 50, got {n_members}")
+        
+        figs = []
+        
+        for fig_idx, (nrows, ncols) in enumerate(configs):
+            member_start = member_ranges[fig_idx].start
+            member_end = member_ranges[fig_idx].stop
+            n_members_in_fig = member_end - member_start
+            
+            # Make figure size (2 basins per member, so ncols = 4 with spacing)
+            fig_w = 10 * ncols + 2  # Extra space for column spacing
+            fig_h = 5 * nrows + 2  # Extra space for top titles and colorbar
+            fig = plt.figure(figsize=(fig_w, fig_h))
+            
+            # GridSpec with extra space for column titles at top, plot rows, and colorbar at bottom
+            # height_ratios: space for titles, plot rows, space for colorbar
+            height_ratios = [0.5] + [5] * nrows + [0.2, 0.75]
+            # width_ratios: normal spacing except extra space between col 2 and 3
+            width_ratios = [5, 5, 0.6, 5, 5] if ncols == 4 else [5] * ncols
+            
+            gs = GridSpec(nrows + 3, ncols + 1, figure=fig, 
+                          height_ratios=height_ratios, 
+                          width_ratios=width_ratios,
+                          hspace=0.1, wspace=0.1)
+            
+            n_members_per_row = ncols // 2
+            
+            # Track axes for title placement and last contourf for colorbar
+            axes_first_row = {}
+            last_cf = None
+            
+            for member_idx in range(member_start, member_end):
+                member_num = member_idx + 1  # 1-indexed for display
+                
+                glo_member = glo[member_idx]
+                atlantic_member = atlantic[member_idx]
+                indopac_member = indopac[member_idx]
+                
+                if lat_zoom is not None:
+                    if isinstance(lat_zoom, slice):
+                        glo_member = glo_member.sel(lat=lat_zoom)
+                        atlantic_member = atlantic_member.sel(lat=lat_zoom)
+                        indopac_member = indopac_member.sel(lat=lat_zoom)
+                    else:
+                        raise ValueError("'lat_zoom' must be of type slice.")
+                
+                # Slice layers if specified
+                if layers is not None:
+                    if isinstance(layers, int):
+                        layers_slice = slice(0, layers)
+                    elif isinstance(layers, slice):
+                        layers_slice = layers
+                    else:
+                        raise ValueError("'layers' must be of type int or slice.")
+                    glo_member = glo_member.isel({self.depth_name: layers_slice})
+                    atlantic_member = atlantic_member.isel({self.depth_name: layers_slice})
+                    indopac_member = indopac_member.isel({self.depth_name: layers_slice})
+                    depth_member = glo_member[self.depth_name].values
+                else:
+                    depth_member = depth
+                
+                # Position within the figure
+                relative_idx = member_idx - member_start
+                row = relative_idx // n_members_per_row + 1  # +1 for title row
+                col_offset = (relative_idx % n_members_per_row) * 2
+                
+                # Adjust column offset for spacing between col 2 and 3
+                if col_offset >= 2:
+                    gs_col_offset = col_offset + 1
+                else:
+                    gs_col_offset = col_offset
+                
+                # Determine member ID format
+                if n_members == 50:
+                    member_id = f"r{member_num}i1p1f1"
+                else:  # 16 members
+                    member_id = f"r{member_num}i8p4"
+                
+                # Plot Atlantic (first column of the pair)
+                ax_atl = fig.add_subplot(gs[row, gs_col_offset])
+                cf_atl = ax_atl.contourf(
+                    atlantic_member["lat"], depth_member, atlantic_member,
+                    levels=self.clevels, cmap="RdBu_r",
+                    vmin=-self.vmax, vmax=self.vmax, extend='both'
+                )
+                last_cf = cf_atl  # Keep reference for colorbar
+                
+                cs_atl = ax_atl.contour(atlantic_member["lat"], depth_member, atlantic_member, 
+                                        levels=self.clevels, colors="grey", linewidths=0.5)
+                ax_atl.contour(atlantic_member["lat"], depth_member, atlantic_member, 
+                               levels=[0], colors="black", linewidths=1.0)
+                ax_atl.clabel(cs_atl, inline=True, fontsize=8, fmt="%1.0f")
+                ax_atl.invert_yaxis()
+                
+                # Overlay Southern Ocean portion
+                so_part = glo_member.sel(lat=slice(None, self.SOlat))
+                if lat_zoom is None or lat_zoom.start < self.SOlat:
+                    ax_atl.contourf(
+                        so_part["lat"], depth_member, so_part,
+                        levels=self.clevels, cmap="RdBu_r",
+                        vmin=-self.vmax, vmax=self.vmax
+                    )
+                    cs_so = ax_atl.contour(so_part["lat"], depth_member, so_part, 
+                                           levels=self.clevels, colors="grey", linewidths=0.5)
+                    ax_atl.contour(so_part["lat"], depth_member, so_part, 
+                                   levels=[0], colors="black", linewidths=1.0)
+                    ax_atl.axvline(self.SOlat, color="black", linestyle="dotted")
+                    ax_atl.clabel(cs_so, inline=True, fontsize=8, fmt="%1.0f")
+                
+                # Only add labels on first column
+                
+                if True: #col_offset == 0:
+                    ax_atl.set_ylabel("Depth (m)", fontsize=20)
+                    ax_atl.set_yticklabels(np.arange(0,6000,1000), fontsize=14)
+                else:
+                    ax_atl.set_yticklabels([])
+
+                if row==nrows:
+                    ax_atl.set_xlabel("Latitude", fontsize=20)
+                    ax_atl.set_xticklabels(np.arange(-80,80,20), fontsize=14)
+                else:
+                    ax_atl.set_xticklabels([])
+                
+                if layers is None:
+                    ax_atl.set_ylim([6000, 0])
+                else:
+                    ylims = [depth_member[layers_slice.stop - 1], depth_member[layers_slice.start]]
+                    ax_atl.set_ylim(ylims)
+                
+                if lat_zoom is not None:
+                    ax_atl.set_xlim([lat_zoom.start, lat_zoom.stop])
+                
+                # Add member ID label to the left of Atlantic column
+                ax_atl.text(
+                    -0.2, 0.5, member_id,
+                    color='black',
+                    transform=ax_atl.transAxes,
+                    rotation=90,
+                    va='center', ha='center',
+                    fontsize=20, fontweight='bold'
+                )
+                
+                # Store first row axes for title placement
+                if row == 1:
+                    axes_first_row[f'atl_{col_offset}'] = ax_atl
+                
+                
+                # Plot Indo-Pacific (second column of the pair)
+                ax_indopac = fig.add_subplot(gs[row, gs_col_offset + 1])
+                cf_indopac = ax_indopac.contourf(
+                    indopac_member["lat"], depth_member, indopac_member,
+                    levels=self.clevels, cmap="RdBu_r",
+                    vmin=-self.vmax, vmax=self.vmax, extend='both'
+                )
+                last_cf = cf_indopac  # Keep reference for colorbar
+
+                indopac_member = indopac_member.sel(lat=slice(self.SOlat, None))
+                cs_indopac = ax_indopac.contour(indopac_member["lat"], depth_member, indopac_member, 
+                                                levels=self.clevels, colors="grey", linewidths=0.5)
+                ax_indopac.contour(indopac_member["lat"], depth_member, indopac_member, 
+                                   levels=[0], colors="black", linewidths=1.0)
+                ax_indopac.clabel(cs_indopac, inline=True, fontsize=8, fmt="%1.0f")
+                ax_indopac.invert_yaxis()
+                
+                # Overlay Southern Ocean portion
+                so_part = glo_member.sel(lat=slice(None, self.SOlat))
+                if lat_zoom is None or lat_zoom.start < self.SOlat:
+                    ax_indopac.contourf(
+                        so_part["lat"], depth_member, so_part,
+                        levels=self.clevels, cmap="RdBu_r",
+                        vmin=-self.vmax, vmax=self.vmax
+                    )
+                    cs_so = ax_indopac.contour(so_part["lat"], depth_member, so_part, 
+                                           levels=self.clevels, colors="grey", linewidths=0.5)
+                    ax_indopac.contour(so_part["lat"], depth_member, so_part, 
+                                   levels=[0], colors="black", linewidths=1.0)
+                    ax_indopac.axvline(self.SOlat, color="black", linestyle="dotted")
+                    ax_indopac.clabel(cs_so, inline=True, fontsize=8, fmt="%1.0f")
+                
+                
+                
+                if layers is None:
+                    ax_indopac.set_ylim([6000, 0])
+                else:
+                    ylims = [depth_member[layers_slice.stop - 1], depth_member[layers_slice.start]]
+                    ax_indopac.set_ylim(ylims)
+                
+                if lat_zoom is not None:
+                    ax_indopac.set_xlim([lat_zoom.start, lat_zoom.stop])
+                
+                
+                ax_indopac.set_yticklabels([])
+
+                if row==nrows:
+                    ax_indopac.set_xlabel("Latitude", fontsize=20)
+                    ax_indopac.set_xticklabels(np.arange(-80,80,20), fontsize=14)
+                else:
+                    ax_indopac.set_xticklabels([])
+                    
+                
+                # Store first row axes for title placement
+                if row == 1:
+                    axes_first_row[f'indopac_{col_offset}'] = ax_indopac
+            
+            # Add column titles only on the first row
+            for pair_idx in range(n_members_per_row):
+                gs_col = pair_idx * 2
+                if gs_col >= 2:
+                    gs_col += 1
+                
+                # Atlantic title
+                if f'atl_{pair_idx * 2}' in axes_first_row:
+                    ax = axes_first_row[f'atl_{pair_idx * 2}']
+                    ax.text(0.5, 1.15, "Atlantic", transform=ax.transAxes,
+                           fontsize=25, fontweight='bold', ha='center', va='bottom')
+                
+                # Indo-Pacific title
+                if f'indopac_{pair_idx * 2}' in axes_first_row:
+                    ax = axes_first_row[f'indopac_{pair_idx * 2}']
+                    ax.text(0.5, 1.15, "Indo-Pacific", transform=ax.transAxes,
+                           fontsize=25, fontweight='bold', ha='center', va='bottom')
+            
+            # Add colorbar at the bottom spanning all columns
+            if last_cf is not None:
+                cax = fig.add_subplot(gs[-1, :])
+                cbar = fig.colorbar(last_cf, cax=cax, orientation="horizontal")
+                cbar.set_label("Meridional Transport (Sv)", fontsize=20)
+            
+            figs.append(fig)
+        
+        plt.show()
+        
+        # Save figures if requested
+        if savefig:
+            os.makedirs(folder, exist_ok=True)
+            for fig_idx, fig in enumerate(figs):
+                timestamp = atlantic[0].time.dt.year.values if "time" in atlantic[0].dims else 0
+                fname = f"moc_members_{run}_{fig_idx+1}_of_{len(figs)}_{timestamp}.png"
+                fig.savefig(os.path.join(folder, fname), dpi=300, bbox_inches="tight")
+                plt.close(fig)
+        
+        return figs
+
 
 ### draw_arrows
     def draw_arrows(self, axs, moc, basin="glo"):
