@@ -9,6 +9,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import ListedColormap
 from cartopy.util import add_cyclic_point
 from matplotlib.patches import Patch
+from matplotlib.gridspec import GridSpec
 
 class MyDataHandler:
     def __init__(self, data): self.data = data
@@ -51,8 +52,22 @@ class innerocean:
             K = 0
     
         # load + time-average all datasets; extract variable and depth name
+
+        titles_vert = []
+        for name in self.suptitles:
+            if name == 'observations':
+                n_vert = 'EN4'
+            n_vert = name.split('_')
+            if 'historical' in n_vert:
+                n_vert = n_vert[0][:4].upper()
+            elif "atm" in n_vert or "oce" in n_vert:
+                n_vert = n_vert[1][:3].upper()
+            titles_vert.append(n_vert)
+
+
+        
         self.members = []
-        for f, t, title in zip(self.files, self.typs, self.suptitles):
+        for f, t, title, title_short in zip(self.files, self.typs, self.suptitles, titles_vert):
             ds = xr.open_dataset(f) if isinstance(f, str) else f
 
             handler = MyDataHandler(ds)
@@ -83,6 +98,7 @@ class innerocean:
                 'depth_name': depth_name,
                 'title': title,
                 'color': self._get_color(title),
+                'title_short': title_short
             })
 
         # basin masks (assume same grid as data; if not, regrid beforehand)
@@ -113,7 +129,7 @@ class innerocean:
 
         # colour levels
         if self.varname == 'thetao' or self.varname == 'temperature':
-            self.label = 'Temperature (°C)'
+            self.label = 'Potential temperature (°C)'
             self.clevels = np.arange(0, 15, 0.5)
 
             colors = [
@@ -364,6 +380,122 @@ class innerocean:
         
         return fig
 
+
+    # -------- zonal mean (lat vs depth), 3 rows × N columns --------
+    def plot_zonalmean_v2(self, clevels=None, cmap=None):
+        """
+        Plot zonal-mean (lat x depth) panels arranged in 3 x n subplots and add a single
+        vertical colorbar on the right that is 0.8 of the figure height. Column titles
+        (member titles) remain above each column; basin titles are shown once per row as
+        vertical row labels on the left (correctly centered and not overlapping axis labels).
+        """
+        if clevels is None:
+            clevels = self.clevels
+
+        if cmap is None:
+            cmap = self.cmap
+
+
+        # Make figure size
+        fig_w = 20
+        fig_h = 5 * self.n + (1.5) # if add_cbar else 0)
+        fig = plt.figure(figsize=(fig_w, fig_h))
+
+        # GridSpec: rows = n_sim (plots) + (1 if add_cbar else 0) for colorbar
+        gs_rows = self.n + 1+ 1 # if add_cbar else 0)
+        # Use a small height ratio for the colorbar row (last row)
+        height_ratios = [5] * self.n + [0.075] +[.75]
+        gs = GridSpec(gs_rows, 2, figure=fig, height_ratios=height_ratios, hspace=0.2, wspace=0.12) 
+
+        last_cf = None  # will keep a reference to the last contourf mappable
+        axes = np.array([[None for _ in range(2)] for _ in range(self.n)])
+    
+        # Create subplots in the same order as before
+        for j, m in enumerate(self.members):
+            datavar_atl, datavar_indopac, datavar_so = self._mask_basins(m['data_timemean'])
+            for i, (basin_data, basin_title) in enumerate(
+                zip([datavar_atl, datavar_indopac], self.basin_titles[:2])
+            ):
+
+                ax = fig.add_subplot(gs[j, i])
+                axes[j][i] = ax
+    
+                cf = ax.contourf(
+                    basin_data.lat,
+                    basin_data[m['depth_name']],
+                    basin_data.mean(dim='lon'),
+                    levels=clevels,
+                    cmap=cmap,
+                    extend='both'
+                )
+                ax.contourf(
+                    datavar_so.lat,
+                    datavar_so[m['depth_name']],
+                    datavar_so.mean(dim='lon'),
+                    levels=clevels,
+                    cmap=cmap,
+                    extend='both'
+                )
+
+                if self.varname == 'xx': #'thetao':
+                    ax.contour(
+                        basin_data.lat,
+                        basin_data[m['depth_name']],
+                        basin_data.mean(dim='lon'),
+                        levels=[4],
+                        colors='white',
+                        linewidths=2.0)
+                    ax.contour(
+                        datavar_so.lat,
+                        datavar_so[m['depth_name']],
+                        datavar_so.mean(dim='lon'),
+                        levels=[4],
+                        colors='white',
+                        linewidths=2.0)
+
+                ax.axvline(-34.5, color='black', linestyle='dotted')
+                
+                ax.invert_yaxis()
+                # self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude')
+
+                if j==3:
+                    ax.set_xlabel('Latitude')                    
+                if i==0: 
+                    ax.set_ylabel('Depth (m)')
+                
+                last_cf = cf  # keep updating to have a valid mappable for the colorbar
+
+            
+    
+        # Reserve space on the right for a single colorbar and add margins for row labels/xlabels:
+        # fig.tight_layout(rect=[0.08, 0.06, 0.92, 0.95])
+    
+        # self._set_basin_titles(fig)
+
+        for c, ax in enumerate(axes[0,:]):
+            ax.set_title(self.basin_titles[c], pad=20)
+
+        suptitle = ['HIST', 'ATM', 'OCE', 'EN4']
+        color = [m['color'] for m in self.members]
+        for r, ax in enumerate(axes[:,0]):
+            ax.text(
+                -0.17, 0.5, suptitle[r],
+                color=color[r],
+                transform=ax.transAxes,
+                rotation=90,
+                va='center', ha='center',
+                fontsize=28, fontweight='bold'
+            )
+    
+        # Only add the colorbar if we captured a mappable
+        if last_cf is not None:
+            cax = fig.add_subplot(gs[-1, :])
+            cbar = fig.colorbar(last_cf, cax=cax, orientation='horizontal', pad=.3)
+            cbar.set_label(self.label)
+        
+        return fig
+
+    
     # -------- zonal mean (lat vs depth), 3 rows × N columns --------
     def plot_zonalmean_diff(self, clevels=None):
         """
@@ -694,7 +826,7 @@ class innerocean:
         return fig
 
     
-    def hovmueller(self, lats, basins=False):
+    def hovmoeller(self, lats, basins=False):
         
         if not isinstance(lats, list):
             lats = [lats]
@@ -717,6 +849,7 @@ class innerocean:
             fig = figs[l]
             last_cf = None  # will keep a reference to the last contourf mappable
 
+            axes = np.array([])
             for j, m in enumerate(self.members):
                 mean_dims = ['lon']
                 if isinstance(lat, slice):
@@ -748,7 +881,8 @@ class innerocean:
 
                     ax.invert_yaxis()
                     self._set_labels(ax,m,j,i, y='Depth (m)', x='Time', tit=f'{lat}°')
-        
+
+                                        
                     last_cf = cf  # keep updating to have a valid mappable for the colorbar
                 
                      # Reserve space on the right for a single colorbar and add margins for row labels/xlabels:
@@ -757,11 +891,6 @@ class innerocean:
                 if basins:
                     self._set_basin_titles(fig)
             
-                # Colorbar axis params: vertical, 0.8 of figure height
-                cbar_width = 0.05 * 1/self.n
-                cbar_height = 0.6
-                cbar_left = 0.94
-                cbar_bottom = (1.0 - cbar_height) / 2.0
             
                 # Only add the colorbar if we captured a mappable
                 if last_cf is not None:
@@ -773,7 +902,154 @@ class innerocean:
             
         return figs
 
+
+    def hovmoeller_v2(self, lats, basins=False):
+        
+        if not isinstance(lats, list):
+            lats = [lats]
+    
+        figs = []
+        
+        for l, lat in enumerate(lats):
+    
+            if basins and lat <= -34.5:
+                ncols = 3
+            elif basins and lat > -34.5:
+                ncols = 2
+            else:
+                ncols = 1
+    
+            # Now ncols is based on basins, and nrows is based on members
+            nrows = self.n
+    
+            figs.append(plt.figure(figsize=(7 * ncols, 3.5 * nrows + 1.5)))
+            
+            fig = figs[l]
+            
+            # GridSpec: rows = n_sim (plots) + (1 if add_cbar else 0) for colorbar
+            gs_rows = self.n + 1+ 1 # if add_cbar else 0)
+            # Use a small height ratio for the colorbar row (last row)
+            height_ratios = [7] * self.n + [0.2] +[1.05]
+            gs = GridSpec(gs_rows, ncols, figure=fig, height_ratios=height_ratios, hspace=0.2, wspace=0.12) 
+
+            axes = np.array([[None for _ in range(ncols)] for _ in range(nrows)])
+            last_cf = None  # will keep a reference to the last contourf mappable
+    
+            for j, m in enumerate(self.members):
+                mean_dims = ['lon']
+                if isinstance(lat, slice):
+                    mean_dims.append('lat')
+    
+                if basins:
+                    datas = self._mask_basins(m['data'])
+                    data = [d.sel(lat=lat, method='nearest').mean(dim=mean_dims) for d in datas]
+                    plot_title = self.basin_titles
                 
+                else:
+                    data = [m['data'].sel(lat=lat, method='nearest').mean(dim=mean_dims)]
+                    plot_title = ['Global']
+    
+                for i, (basin_data, basin_title) in enumerate(zip(data, plot_title)):  
+    
+                    if ncols==2 and 'Southern' in basin_title:
+                        continue
+    
+                    # Swapped: now row is j (member index), column is i (basin index)
+                    ax = fig.add_subplot(gs[j, i])
+                    axes[j,i] = ax
+
+                    time = np.array(basin_data.time)
+                    cf = ax.contourf(
+                        time,
+                        basin_data[m['depth_name']],
+                        basin_data.transpose(m['depth_name'], 'time'),
+                        levels=self.clevels,
+                        cmap=self.cmap,
+                        extend='both'
+                    )
+    
+                    ax.invert_yaxis()
+                    # Updated label: member name on y-axis, basin/location on x-axis title
+                    # self._set_labels(ax, m, j, i, y='Depth (m)', x='Time', tit=f'{basin_title} at {lat}°')
+
+                    # Add ticks to all subplots
+                    #ax.set_xticks(np.arange(1960, 2010, 20))
+                    ax.set_yticks(np.arange(1000, 6000, 1000))
+                    
+                    # Add x-axis labels to last row only
+                    if j == nrows - 1:  # last row
+                        # ax.set_xticklabels(np.arange(1960, 2010, 20))
+                        ax.set_xlabel('Year')
+                    else:
+                        ax.set_xticklabels([])
+                    
+                    # Add y-axis labels to first column only
+                    if i == 0:  # first column
+                        ax.set_yticklabels(np.arange(1000, 6000, 1000))
+                        ax.set_ylabel('Depth (m)')
+                    else:
+                        ax.set_yticklabels([])
+
+        
+                    last_cf = cf  # keep updating to have a valid mappable for the colorbar
+                
+            # Add member labels on the left side
+            if basins:
+                for col, ax in enumerate(axes[0,:]):
+                    ax.set_title(self.basin_titles[col], pad=20)
+                # self._set_member_labels(fig, nrows)
+            
+            # Add basin titles on the top
+            # if basins:
+            #    self._set_basin_column_titles(fig, ncols, self.basin_titles)
+            
+            suptitle = ['HIST', 'ATM', 'OCE', 'EN4']
+            color = [m['color'] for m in self.members]
+            for r, ax in enumerate(axes[:,0]):
+                ax.text(
+                    -.3, 0.5, suptitle[r],
+                    color=color[r],
+                    transform=ax.transAxes,
+                    rotation=90,
+                    va='center', ha='center',
+                    fontsize=28, fontweight='bold'
+                    )
+            
+            # Only add the colorbar if we captured a mappable
+            if last_cf is not None:
+                cax = fig.add_subplot(gs[-1,:])
+                cbar = fig.colorbar(last_cf, cax=cax, orientation='horizontal')
+                cbar.set_label(self.label)
+
+            lat_title = str(lat)+ '°N' if lat>0 else str(np.abs(lat))+'°S'
+            fig.suptitle(lat_title)
+        
+        plt.show()
+            
+        return figs
+    
+    
+    def _set_member_labels(self, fig, nrows):
+        """Add member labels on the left side of the plot."""
+        for j, m in enumerate(self.members):
+            if j < nrows:
+                # Get the first subplot in each row to position the label
+                ax = fig.axes[j * len(self.basin_titles)]  # First column of each row
+                ax.text(-0.5, 0.5, m['title_short'], color=m['color'],
+                        transform=ax.transAxes, 
+                        fontsize=24, weight='bold', ha='right', va='center', rotation=90)
+    
+    
+    def _set_basin_column_titles(self, fig, ncols, basin_titles):
+        """Add basin titles as column headers at the top of the plot."""
+        for i, basin_title in enumerate(basin_titles):
+            if i < ncols:
+                # Get the first subplot in each column
+                ax = fig.axes[i]
+                ax.text(0.5, 1.05, basin_title, transform=ax.transAxes,
+                       fontsize=12, weight='bold', ha='center', va='bottom')
+
+            
 
     def _set_labels(self,ax,m,j,i, y='Depth (m)', x='Latitude', tit=None):
         if j == 0:
