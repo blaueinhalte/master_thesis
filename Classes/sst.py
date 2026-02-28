@@ -117,6 +117,19 @@ class sst:
             titles.append(n)     
         self.titles = titles
 
+        titles_vert = []
+        for name in self.names:
+            if name == 'observations':
+                n_vert = 'HadISST'
+            n_vert = name.split('_')
+            if 'historical' in n_vert:
+                n_vert = n_vert[0][:4].upper()
+            elif "atm" in n_vert or "oce" in n_vert:
+                n_vert = n_vert[1][:3].upper()
+            titles_vert.append(n_vert)
+        self.titles_vert = titles_vert
+        
+
     # ----------------------------------------------------
     #  Basic Processing
     # ----------------------------------------------------
@@ -231,9 +244,9 @@ class sst:
     # ----------------------------------------------------
     #  Plotting
     # ----------------------------------------------------
-    def plot_mean_maps(self, diff=False, corr=False, ref='observations'):
+    def plot_mean_maps(self, diff=False, corr=False, ref='observations', vert=False):
         """Plot mean SST maps for all runs."""
-
+    
         if diff and not corr:
             data_mean = self.compute_diff_mean(ref=ref)
             cmap = 'seismic'
@@ -242,7 +255,7 @@ class sst:
             csteps = 4*tos_max+1
             cssteps = csteps 
             n = len(self.names) - 1
-            clabel = 'SST difference (°C)'
+            clabel = 'SST difference (K)'
             levs = np.linspace(tos_min, tos_max, csteps)
             
         elif corr and not diff:
@@ -252,7 +265,7 @@ class sst:
             tos_max = 1
             cssteps = 0
             n = len(self.names) - 1
-
+    
             csteps = 21
             cmap = plt.get_cmap('PRGn')
             cmap_alpha = cmap(np.linspace(0, 1, csteps))
@@ -280,7 +293,8 @@ class sst:
             levs = np.linspace(tos_min, tos_max, 99)
             n = len(self.names)
             clabel = 'SST (°C)'
-
+    
+        
         if n==3:
             w,h = [3,1]
         elif n>3:
@@ -289,22 +303,41 @@ class sst:
             w,h = [2,1]
         elif n==1:
             w,h = [1,1]
+    
+        if vert:
+            w,h = h,w
+    
             
-        fsize = (10*w, 6*h)
+        fsize = (10*w, 6*h) 
         fig = plt.figure(figsize=fsize)
-        if n > 3:
-            gs = GridSpec(2, int(np.ceil(n/2)))
-        elif n == 3:
-            gs = GridSpec(1,3)
-        else:
-            gs = GridSpec(1,n)
-
+    
+        height_ratios = [6] * h + ([0.075, .75] if vert else [])
+        width_ratios = [10]*w + ([] if  vert else [0.75])
+    
         
-        for i, (name, title, col) in enumerate(zip(self.names[:n], self.titles[:n], self.colors[:n])):
-            if n==3:
+        
+        if n > 3:
+            gs = GridSpec(2, int(np.ceil(n/2)), figure=fig, height_ratios=height_ratios, width_ratios = width_ratios, hspace=0.2, wspace=0.12) 
+    
+        elif n == 3:
+            gs = GridSpec(len(height_ratios),len(width_ratios), figure=fig, height_ratios=height_ratios, width_ratios = width_ratios, hspace=0.2, wspace=0.12) 
+    
+        else:
+            gs = GridSpec(1,n, figure=fig, height_ratios=height_ratios, width_ratios = width_ratios, hspace=0.2, wspace=0.12) 
+    
+    
+        
+        for i, (name, title, col) in enumerate(zip(self.names[:n], self.titles_vert[:n] if vert else self.titles[:n], self.colors[:n])):
+            if n==3 and not vert:
                 ax = fig.add_subplot(gs[0,i], projection=ccrs.PlateCarree())
+                row, col_idx = 0, i
+            elif n==3 and vert:
+                ax = fig.add_subplot(gs[i,0], projection=ccrs.PlateCarree())
+                row, col_idx = i, 0
             else:
                 ax = fig.add_subplot(gs[i // 2, i % 2], projection=ccrs.PlateCarree())
+                row, col_idx = i // 2, i % 2
+                
             ax.add_feature(cfeature.COASTLINE, edgecolor='lightgrey', linewidth=0.6)
             ax.add_feature(cfeature.LAND, color='whitesmoke')
         
@@ -328,11 +361,44 @@ class sst:
                 colors='grey',
                 linewidths=0.5
             )
-
-            ax.set_title(title, color=col, fontweight='bold')
+    
+            # Add ticks to all subplots
+            ax.set_xticks(np.arange(-180, 181, 60), crs=ccrs.PlateCarree())
+            ax.set_yticks(np.arange(-90, 91, 30), crs=ccrs.PlateCarree())
+            
+            # Add x-axis labels to last row only
+            if row == h - 1:  # last row
+                labels = ['180°','120°W','60°W', '0°','60°E','120°E','180°']
+                ax.set_xticklabels(labels)
+                # ax.set_xlabel('Longitude')
+            else:
+                ax.set_xticklabels([])
+            
+            # Add y-axis labels to first column only
+            if col_idx == 0 and not corr:  # first column
+                labels = ['90°S','60°S','30°S', '0°','30°N','60°N','90°N']
+                ax.set_yticklabels(labels)
+                # ax.set_ylabel('Latitude')
+            else:
+                ax.set_yticklabels([])
+    
+            if not vert:
+                ax.set_title(title, color=col, fontweight='bold')
+    
+            elif vert and not corr:
+                ax.text(
+                    -0.17, 0.5, title,
+                    color=col,
+                    transform=ax.transAxes,
+                    rotation=90,
+                    va='center', ha='center',
+                    fontsize=28, fontweight='bold'
+                )
         
-        cbar_ax = fig.add_axes([0.92, 0.1, 0.01, 0.8])
-        cbar = fig.colorbar(c, cax=cbar_ax)
+        # cbar_ax = fig.add_axes([0.92, 0.1, 0.01, 0.8])
+        cbar_pos = gs[-1,:] if vert else gs[:,-1]
+        cbar_ax = fig.add_subplot(cbar_pos)
+        cbar = fig.colorbar(c, cax=cbar_ax, orientation="horizontal" if vert else 'vertical')
         cbar.set_label(clabel)
         if not diff and not corr:
             cbar.set_ticks(np.arange(0,30,5))  # Set the tick positions
