@@ -357,7 +357,7 @@ class innerocean:
                 ax.axvline(-34.5, color='black', linestyle='dotted')
                 
                 ax.invert_yaxis()
-                self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude')
+                self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude (°N)')
                 
                 last_cf = cf  # keep updating to have a valid mappable for the colorbar
     
@@ -456,10 +456,10 @@ class innerocean:
                 ax.axvline(-34.5, color='black', linestyle='dotted')
                 
                 ax.invert_yaxis()
-                # self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude')
+                # self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude (°N)')
 
                 if j==3:
-                    ax.set_xlabel('Latitude')                    
+                    ax.set_xlabel('Latitude (°N)')                    
                 if i==0: 
                     ax.set_ylabel('Depth (m)')
                 
@@ -585,7 +585,7 @@ class innerocean:
                 ax.axvline(-34.5, color='black', linestyle='dotted')
                 
                 ax.invert_yaxis()
-                self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude')
+                self._set_labels(ax,m,j,i, y='Depth (m)', x='Latitude (°N)')
                 
                 last_cf = cf  # keep updating to have a valid mappable for the colorbar
     
@@ -701,7 +701,7 @@ class innerocean:
             ax1.invert_yaxis()
             # set labels and title for top row
             if hasattr(self, '_set_labels'):
-                self._set_labels(ax1, m, j, 0, y='Depth (m)', x='Latitude')
+                self._set_labels(ax1, m, j, 0, y='Depth (m)', x='Latitude (°N)')
             # ax1.set_title(m.get('title', '') if isinstance(m, dict) else '')
             last_data_cf = cf1
     
@@ -733,7 +733,7 @@ class innerocean:
                 ax2.axvline(-34.5, color='black', linestyle='dotted')
                 ax2.invert_yaxis()
                 if hasattr(self, '_set_labels'):
-                    self._set_labels(ax2, m, j, 1, y='Depth (m)', x='Latitude')
+                    self._set_labels(ax2, m, j, 1, y='Depth (m)', x='Latitude (°N)')
                 last_diff_cf = cf2
     
             # Row 3: Indo-Pacific data
@@ -758,7 +758,7 @@ class innerocean:
             ax3.axvline(-34.5, color='black', linestyle='dotted')
             ax3.invert_yaxis()
             if hasattr(self, '_set_labels'):
-                self._set_labels(ax3, m, j, 2, y='Depth (m)', x='Latitude')
+                self._set_labels(ax3, m, j, 2, y='Depth (m)', x='Latitude (°N)')
             last_data_cf = cf3
     
             # Row 4: Indo-Pacific difference to observations
@@ -788,7 +788,7 @@ class innerocean:
                 ax4.axvline(-34.5, color='black', linestyle='dotted')
                 ax4.invert_yaxis()
                 if hasattr(self, '_set_labels'):
-                    self._set_labels(ax4, m, j, 3, y='Depth (m)', x='Latitude')
+                    self._set_labels(ax4, m, j, 3, y='Depth (m)', x='Latitude (°N)')
                 last_diff_cf = cf4
     
         # Add basin row labels on the left (one per row), centered vertically for each row.
@@ -1051,7 +1051,7 @@ class innerocean:
 
             
 
-    def _set_labels(self,ax,m,j,i, y='Depth (m)', x='Latitude', tit=None):
+    def _set_labels(self,ax,m,j,i, y='Depth (m)', x='Latitude (°N)', tit=None):
         if j == 0:
             ax.set_ylabel(y)
         if i == 2:
